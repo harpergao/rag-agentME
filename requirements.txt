@@ -20,6 +20,7 @@ langchain-text-splitters
 sentence-transformers
 faiss-cpu
 PyQt5
+langgraph
 pypdf
 # Optional dependency
 # Uncomment the following line if you need flash-attn

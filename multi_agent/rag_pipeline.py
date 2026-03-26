@@ -90,7 +90,7 @@ def _iter_knowledge_files(knowledge_dir: str) -> Iterable[Path]:
         return []
     return (file for file in base.rglob("*") if file.is_file())
 
-
+# 构建检索器：加载 knowledge_base/ 目录下的 txt/md/pdf 等文件
 def load_documents(knowledge_dir: str = DEFAULT_KNOWLEDGE_BASE) -> List[Document]:
     if not os.path.isdir(knowledge_dir):
         return []
@@ -174,6 +174,8 @@ class HybridRetriever:
         scored = []
         for idx, doc in enumerate(documents):
             key = (doc.metadata.get("source"), doc.page_content[:200])
+            ##  idx + 1 就是文档在单路召回中的排名,权重除以排名，排名越靠前（idx越小），得分越高
+            ## 改进了 RRF 算法，引入了可调配的权重因子，使得不同检索器的贡献可以灵活调整，而不仅仅依赖于排名位置
             score = weight / (idx + 1)
             scored.append((key, score, doc))
         return scored

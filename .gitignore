@@ -6,6 +6,15 @@ __pycache__/
 # C extensions
 *.so
 
+coco_2014_caption/
+qwen3-vl-4b-instruct/
+multi_agent/knowledge_base/
+.csv
+.jpg
+.csv
+.pdf
+output/
+output/Qwen3-VL-4Bmoelora/
 # Distribution / packaging
 .Python
 build/

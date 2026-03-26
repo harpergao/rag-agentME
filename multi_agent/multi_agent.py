@@ -1,4 +1,13 @@
 """多智能体 + RAG 编排，去除对 LangChain Agent API 的依赖。"""
+"""
+预处理与路由 (Pre-processing & Routing): 系统先判断是否是“总结归档”类任务。如果是，走特殊的分支；如果不是，正常向下流转。
+上下文准备 (Context Augmentation): KnowledgeAgent 介入，调用你之前写的 rag_pipeline 获取外部知识Docs。
+双轨前置思考 (Dual-Track Pre-thinking):
+PlannerAgent 负责“步骤拆解”（生成任务执行链）。
+ManagerAgent 负责“宏观调度”（判断当前知识够不够，需要什么额外提示）。
+多模态生成 (Generation): ResponseAgent 接收前面的“计划” + “调度信息” + “知识上下文” + “用户图文”，进行主干内容的生成。
+自我反思与纠错 (Self-Refine): 整个系统最精髓的地方.ReviewerAgent 对生成的答案进行质检PASS / RETRY。如果不合格.带着“改进建议”强行打回给 ResponseAgent 重写（最多重试一次，防止死循环）。
+"""
 
 from __future__ import annotations
 
@@ -161,9 +170,13 @@ class MultiAgentOrchestrator:
 
     def run(
         self,
+        # 用户文字问题
         question: str,
+        # 可选图像列表
         image_paths: Optional[List[str]] = None,
+        # 是否启用知识库检索
         use_knowledge: bool = True,
+        # 历史对话（可做总结场景
         chat_history: Optional[List[Tuple[str, str]]] = None,
     ) -> AgentOutput:
         history = chat_history or []
@@ -276,5 +289,5 @@ class MultiAgentOrchestrator:
         lines = []
         for idx, (role, content) in enumerate(history, start=1):
             speaker = speaker_map.get(role.lower(), role)
-            lines.append(f"{idx}. **{speaker}**：{content}")
+            lines.append(f"{idx}. **{speaker}**:{content}")
         return "\n".join(lines)

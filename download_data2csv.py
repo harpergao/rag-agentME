@@ -8,7 +8,7 @@ MAX_DATA_NUMBER = 500
 # 检查目录是否已存在
 if not os.path.exists('coco_2014_caption'):
     # 从modelscope下载COCO 2014图像描述数据集
-    ds =  MsDataset.load('modelscope/coco_2014_caption', subset_name='coco_2014_caption', split='train')
+    ds =  MsDataset.load('modelscope/coco_2014_caption', subset_name='coco_2014_caption', split='train', trust_remote_code=True)
     print(len(ds))
     # 设置处理的图片数量上限
     total = min(MAX_DATA_NUMBER, len(ds))

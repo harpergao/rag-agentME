@@ -22,6 +22,7 @@ from transformers import (
     AutoProcessor,
     BitsAndBytesConfig,
 )
+from qwen_vl_utils import process_vision_info  # 关键新增：引入官方图文处理工具
 
 
 class LocalMultimodalModel:
@@ -39,8 +40,10 @@ class LocalMultimodalModel:
         # 保存模型根目录与 LoRA 权重路径（与 test.py 保持同级/同配置）
         self._model_root = model_root
         self._lora_checkpoint = lora_checkpoint
-        # 设备选择：优先使用 GPU（CUDA），否则回退到 CPU
-        self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
+        # 核心修改 1：明确指定使用 cuda:0，避免多卡切分导致 2D RoPE 位置编码冲突
+        self._device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        
         # 只有在 CUDA 可用时才启用 4bit 量化，避免 CPU 环境报错
         self._load_in_4bit = load_in_4bit and torch.cuda.is_available()
         # 先构建处理器，再构建模型
@@ -75,17 +78,26 @@ class LocalMultimodalModel:
                 bnb_4bit_compute_dtype=torch.float16,
             )
 
-        # 加载基础模型；在 CPU 环境禁用 device_map 并用 FP32，避免兼容性问题
+        # 加载基础模型；
+        # 核心修改 2：固定 device_map 为 cuda:0，并使用正确的 torch_dtype 参数名
         model = AutoModelForImageTextToText.from_pretrained(
             self._model_root,
             quantization_config=quant_config,
-            device_map="auto" if torch.cuda.is_available() else None,
-            dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+            device_map="cuda:0" if torch.cuda.is_available() else None,
+            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
             trust_remote_code=True,
         )
-        # 叠加 LoRA 微调权重（PeftModel 封装）
-        model = PeftModel.from_pretrained(model, self._lora_checkpoint)
-        model = model.to(self._device)
+        # 叠加 LoRA 微调权重（PeftModel 封装） - 目前被注释以绕过加载
+        # lora_config_path = os.path.join(self._lora_checkpoint, "adapter_config.json")
+        # if os.path.exists(lora_config_path):
+        #     print(f"检测到 LoRA 权重，正在加载: {self._lora_checkpoint}")
+        #     model = PeftModel.from_pretrained(model, self._lora_checkpoint)
+        # else:
+        #     print(f"未检测到 LoRA 权重或路径错误 ({self._lora_checkpoint})，使用基础模型运行。")
+        
+        # 核心修改 3：【彻底删除 model = model.to(self._device)】
+        # 绝对不能手动 to()，否则会破坏 accelerate 的硬件映射 hook！
+        
         model.eval()
         return model
 
@@ -108,16 +120,7 @@ class LocalMultimodalModel:
         max_new_tokens: int = 256,
         temperature: float = 0.7,
     ) -> str:
-        """执行推理（支持可选的图片输入）。
-
-        参数：
-        - prompt: 文本提示/问题。
-        - image_inputs: 图片路径或 URL 序列（本地路径将被读取为 PIL.Image）。
-        - max_new_tokens: 最多生成的 token 数量，控制显存与长度。
-        - temperature: 采样温度，越高越随机。
-        返回：
-        - 中文回答文本。
-        """
+        """执行推理（支持可选的图片输入）。"""
 
         content: List[dict] = []
         if image_inputs:
@@ -130,20 +133,28 @@ class LocalMultimodalModel:
                     resolved = os.path.abspath(image_path)
                     if not os.path.isfile(resolved):
                         continue
-                    image = Image.open(resolved).convert("RGB")
-                    content.append({"type": "image", "image": image})
+                    # 核心修改 4：直接传递绝对路径，qwen_vl_utils 会更安全地处理底层图像读取
+                    content.append({"type": "image", "image": resolved})
+                    
         content.append({"type": "text", "text": prompt})
         messages = [{"role": "user", "content": content}]
 
-        # 使用处理器将图文混合消息转为模型所需的张量格式
-        inputs = self._processor.apply_chat_template(
-            messages,
-            tokenize=True,
-            add_generation_prompt=True,
-            return_dict=True,
+        # 核心修改 5：分离图文预处理，保障 Qwen-VL 多模态输入的完整性
+        text = self._processor.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
+        image_inputs, video_inputs = process_vision_info(messages)
+
+        inputs = self._processor(
+            text=[text],
+            images=image_inputs,
+            videos=video_inputs,
+            padding=True,
             return_tensors="pt",
         )
-        inputs = {k: v.to(self._device) for k, v in inputs.items()}
+        
+        # 将所有张量移动到正确的显卡（cuda:0）
+        inputs = inputs.to(self._device)
 
         # 关闭梯度节省显存，进行生成
         with torch.no_grad():
