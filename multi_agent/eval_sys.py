@@ -205,55 +205,55 @@ class RAGEvaluator:
             print("✅ 评估完成！结果已保存至 rag_eval_results.csv")
             return result
 
-# if __name__ == "__main__":
-#     evaluator = RAGEvaluator(test_size=5)
+if __name__ == "__main__":
+    evaluator = RAGEvaluator(test_size=5)
     
-#     # 检查是否已有缓存数据，避免重复生成（生成很慢）
-#     if os.path.exists("test_data_cache.csv"):
-#         test_df = pd.read_csv("test_data_cache.csv")
-#         print("📂 加载缓存的测试数据...")
-#     else:
-#         test_df = evaluator.generate_test_data()
-#         test_df.to_csv("test_data_cache.csv", index=False)
+    # 检查是否已有缓存数据，避免重复生成（生成很慢）
+    if os.path.exists("test_data_cache.csv"):
+        test_df = pd.read_csv("test_data_cache.csv")
+        print("📂 加载缓存的测试数据...")
+    else:
+        test_df = evaluator.generate_test_data()
+        test_df.to_csv("test_data_cache.csv", index=False)
     
-#     eval_dataset = evaluator.run_system_inference(test_df)
-#     scores = evaluator.evaluate_and_save(eval_dataset)
+    eval_dataset = evaluator.run_system_inference(test_df)
+    scores = evaluator.evaluate_and_save(eval_dataset)
     
-#     print("\n--- 最终评估报告 ---")
-#     print(scores)
+    print("\n--- 最终评估报告 ---")
+    print(scores)
 
 # # multi_agent/eval_sys.py
 
-if __name__ == "__main__":
-    os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
-    # 实例化评估器
-    evaluator = RAGEvaluator(test_size=1) 
+# if __name__ == "__main__":
+#     os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+#     # 实例化评估器
+#     evaluator = RAGEvaluator(test_size=1) 
     
-    # --- 核心修改：手动构造微型测试集，彻底跳过 TestsetGenerator ---
-    print("\n🧪 [快速验证模式] 正在跳过自动生成，使用手动构造的数据进行链路测试...")
+#     # --- 核心修改：手动构造微型测试集，彻底跳过 TestsetGenerator ---
+#     print("\n🧪 [快速验证模式] 正在跳过自动生成，使用手动构造的数据进行链路测试...")
     
-    # 模拟 Ragas 生成的数据格式
-    test_data = {
-        "question": ["What is the role of graph convolution in the GFMNet architecture for remote sensing change detection?"],
-        "ground_truth": ["Graph convolution is employed in the GFMNet architecture to extract features from bi-temporal remote sensing images by constructing a graph structure where each image patch is treated as a node and edges connect neighboring patches. This enables the extraction of global representations and contextual information from a non-Euclidean space. Graph convolution aggregates information from each node and its neighbors, capturing and updating each node’s feature representation while enabling effective information exchange across the graph. The process uses max-relative graph convolution to integrate information from neighboring nodes and is combined with feed-forward network (FFN) layers to enhance feature transformation capabilities and mitigate over-smoothing in GNNs."]
-    }
-    test_df = pd.DataFrame(test_data)
+#     # 模拟 Ragas 生成的数据格式
+#     test_data = {
+#         "question": ["What is the role of graph convolution in the GFMNet architecture for remote sensing change detection?"],
+#         "ground_truth": ["Graph convolution is employed in the GFMNet architecture to extract features from bi-temporal remote sensing images by constructing a graph structure where each image patch is treated as a node and edges connect neighboring patches. This enables the extraction of global representations and contextual information from a non-Euclidean space. Graph convolution aggregates information from each node and its neighbors, capturing and updating each node’s feature representation while enabling effective information exchange across the graph. The process uses max-relative graph convolution to integrate information from neighboring nodes and is combined with feed-forward network (FFN) layers to enhance feature transformation capabilities and mitigate over-smoothing in GNNs."]
+#     }
+#     test_df = pd.DataFrame(test_data)
 
-    try:
-        # 1. 验证 Agent 推理链路 (Planner -> Manager -> Responder)
-        # 这步会调用你的本地 Qwen 模型和工具
-        print("🚀 第一步：运行多智能体系统进行推理...")
-        eval_dataset = evaluator.run_system_inference(test_df)
+#     try:
+#         # 1. 验证 Agent 推理链路 (Planner -> Manager -> Responder)
+#         # 这步会调用你的本地 Qwen 模型和工具
+#         print("🚀 第一步：运行多智能体系统进行推理...")
+#         eval_dataset = evaluator.run_system_inference(test_df)
         
-        # 2. 验证 Ragas 评分链路
-        # 这步会验证 Ragas 是否能正确识别你的 LocalQwenTextLLM
-        print("📊 第二步：运行 Ragas 评分指标计算...")
-        scores = evaluator.evaluate_and_save(eval_dataset)
+#         # 2. 验证 Ragas 评分链路
+#         # 这步会验证 Ragas 是否能正确识别你的 LocalQwenTextLLM
+#         print("📊 第二步：运行 Ragas 评分指标计算...")
+#         scores = evaluator.evaluate_and_save(eval_dataset)
         
-        print("\n🎉 [全链路通畅] 验证成功！")
-        print("综合评分结果如下：")
-        print(scores)
+#         print("\n🎉 [全链路通畅] 验证成功！")
+#         print("综合评分结果如下：")
+#         print(scores)
         
-    except Exception as e:
-        import traceback
-        print(f"\n❌ [验证失败] 错误详情：\n{traceback.format_exc()}")
+#     except Exception as e:
+#         import traceback
+#         print(f"\n❌ [验证失败] 错误详情：\n{traceback.format_exc()}")

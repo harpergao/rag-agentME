@@ -6,6 +6,9 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.types import Send
 from langgraph.prebuilt import ToolNode # 引入标准工具节点
 
+from dotenv import load_dotenv
+load_dotenv()
+
 # 导入你的本地组件
 from model_client import LocalMultimodalModel 
 from langchain_wrappers import LocalQwenChatModel 
@@ -93,7 +96,7 @@ def should_compress_context(state: SubAgentState) -> Literal["compress_context",
     
     # 安全拼接
     current_text = str([m.content for m in messages if hasattr(m, "content")]) + summary_str
-    TOKEN_LIMIT = 3000 
+    TOKEN_LIMIT = 25000 
     
     if len(current_text) > TOKEN_LIMIT:
         print("🔀 [Router] 上下文超限，路由至 compress_context 节点")
@@ -123,7 +126,7 @@ class AdvancedResearchGraph:
         # 你的硅基流动 API Key
         # 建议生产环境用 os.getenv("SILICONFLOW_API_KEY") 读取环境变量
         
-        siliconflow_api_key = os.getenv("SILICONFLOW_API_KEY", "sk-xzxibqzmtfptojdwacvijjbevubsgpnkmlywfsxlhvqxcxhf")
+        siliconflow_api_key = os.getenv("SILICONFLOW_API_KEY")
         # 直接使用标准的 ChatOpenAI 调用硅基流动
         self.llm = ChatOpenAI(
             model="Qwen/Qwen3-30B-A3B-Instruct-2507", # 硅基流动上的模型 ID
@@ -347,36 +350,75 @@ class AdvancedResearchGraph:
         ans = self.llm.invoke([HumanMessage(content=prompt)])
         return {"messages": [ans]}
 
-    def compress_context(self, state: SubAgentState):
-        """当检索文档过长时：压缩知识，并删除原始的冗长 ToolMessage"""
-        print("🗜️ [Sub] 正在压缩局部工作记忆...")
-        messages = state.get("messages", [])
-        current_summary = state.get("context_summary", "")
+    # def compress_context(self, state: SubAgentState):
+    #     """当检索文档过长时：压缩知识，并删除原始的冗长 ToolMessage"""
+    #     print("🗜️ [Sub] 正在压缩局部工作记忆...")
+    #     messages = state.get("messages", [])
+    #     current_summary = state.get("context_summary", "")
         
-        # 把所有的消息内容拼起来（这里面包含了几万字的文献）
-        full_text = "\n".join([str(m.content) for m in messages if m.content])
+    #     # 把所有的消息内容拼起来（这里面包含了几万字的文献）
+    #     full_text = "\n".join([str(m.content) for m in messages if m.content])
         
-        # 告诉模型之前已经查过什么，防止它失忆后重复查
-        past_keys = state.get("retrieval_keys", [])
-        keys_str = ", ".join(past_keys) if past_keys else "无"
+    #     # 告诉模型之前已经查过什么，防止它失忆后重复查
+    #     past_keys = state.get("retrieval_keys", [])
+    #     keys_str = ", ".join(past_keys) if past_keys else "无"
         
-        prompt = (
-            f"请从以下海量检索结果中提取与子问题 '{state['question']}' 相关的核心事实。\n"
-            f"【注意：你已经查过以下关键词，后续无需重复查找】：{keys_str}\n"
-            f"【已有知识摘要】：{current_summary}\n"
-            f"【最新检索原始文本】：{full_text}"
-        )
-        compressed_knowledge_msg = self.llm.invoke([HumanMessage(content=prompt)])
+    #     prompt = (
+    #         f"请从以下海量检索结果中提取与子问题 '{state['question']}' 相关的核心事实。\n"
+    #         f"【注意：你已经查过以下关键词，后续无需重复查找】：{keys_str}\n"
+    #         f"【已有知识摘要】：{current_summary}\n"
+    #         f"【最新检索原始文本】：{full_text}"
+    #     )
+    #     compressed_knowledge_msg = self.llm.invoke([HumanMessage(content=prompt)])
     
-        # 🚨 核心修复：提取 content 变成纯文本！
-        compressed_text = compressed_knowledge_msg.content if hasattr(compressed_knowledge_msg, "content") else str(compressed_knowledge_msg)
+    #     # 🚨 核心修复：提取 content 变成纯文本！
+    #     compressed_text = compressed_knowledge_msg.content if hasattr(compressed_knowledge_msg, "content") else str(compressed_knowledge_msg)
         
-        delete_messages = [RemoveMessage(id=m.id) for m in messages if m.id]
+    #     delete_messages = [RemoveMessage(id=m.id) for m in messages if m.id]
 
-        return {
-            "context_summary": compressed_text, # 这里存入纯字符串
-            "messages": delete_messages 
-        }
+    #     return {
+    #         "context_summary": compressed_text, # 这里存入纯字符串
+    #         "messages": delete_messages 
+    #     }
+    def compress_context(self, state: SubAgentState):
+    """当检索文档过长时：压缩知识，并安全清理冗长的工具消息"""
+    print("🗜️ [Sub] 正在压缩局部工作记忆...")
+    messages = state.get("messages", [])
+    current_summary = state.get("context_summary", "")
+    
+    # 提取所有文本准备压缩
+    full_text = "\n".join([str(m.content) for m in messages if m.content])
+    
+    past_keys = state.get("retrieval_keys", [])
+    keys_str = ", ".join(past_keys) if past_keys else "无"
+    
+    # 🌟 优化 Prompt：强保真压缩，防止丢弃“干草堆里的针”
+    prompt = (
+        f"你是一个严谨的学术资料整理员。请从以下海量检索结果中提取与问题 '{state['question']}' 相关的核心内容。\n"
+        f"【严格约束】：\n"
+        f"1. 必须原封不动地保留所有与问题相关的具体数值、指标（如 F1 分数）、超参数（如 a=0.30）、模块缩写及全称。\n"
+        f"2. 保留不同算法之间的对比优缺点，不要做模糊化概括。\n"
+        f"【已检索关键词，后续避开】：{keys_str}\n"
+        f"【已有知识摘要】：{current_summary}\n"
+        f"【最新检索文本】：\n{full_text}"
+    )
+    compressed_knowledge_msg = self.llm.invoke([HumanMessage(content=prompt)])
+    compressed_text = compressed_knowledge_msg.content if hasattr(compressed_knowledge_msg, "content") else str(compressed_knowledge_msg)
+    
+    # 🌟 核心修复：精准清理内存，绝不误伤用户问题
+    delete_messages = []
+    for m in messages:
+        # 只删除极其占地方的 ToolMessage (检索结果)
+        # 以及没有工具调用的普通 AIMessage (过期的思考过程)
+        if isinstance(m, ToolMessage) and m.id:
+            delete_messages.append(RemoveMessage(id=m.id))
+        elif isinstance(m, AIMessage) and not m.tool_calls and m.id:
+            delete_messages.append(RemoveMessage(id=m.id))
+
+    return {
+        "context_summary": compressed_text, 
+        "messages": delete_messages 
+    }
 
     def collect_answer(self, state: SubAgentState):
         """收集子图的答案，并提取所有真实的检索文献供 Ragas 评测"""
