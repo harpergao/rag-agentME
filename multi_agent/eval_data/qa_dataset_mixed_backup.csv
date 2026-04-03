@@ -1,0 +1,46 @@
+case_id,question,reference,modality,difficulty,domain_tag,need_retrieval,is_ood
+rs_0001,ConvNeXt-Uphead模型的编码器采用了哪种架构？,ConvNeXt-Uphead模型的编码器采用了ConvNeXt架构，形成了一个双分支网络来提取不同时间点的图像特征。,text,medium,remote_sensing_cd,1,0
+rs_0002,为什么在森林变化检测中，视觉Transformer(ViT)难以在短时间内满足需求？,因为ViT的自注意力机制计算复杂度高，且通常需要大量数据进行训练，而森林变化检测面临数据不足的问题。,text,medium,remote_sensing_cd,1,0
+rs_0003,CAFENet网络中FFEM模块的全称是什么？,FFEM的全称是傅里叶特征交换模块(Fourier feature exchange module)。,text,medium,remote_sensing_cd,1,0
+rs_0004,在CAFENet中，DCAU模块的作用是什么？,DCAU的作用是在解码阶段逐步恢复空间分辨率，同时保留结构信息，以解决传统上采样方法中高频细节丢失的问题。,text,medium,remote_sensing_cd,1,0
+rs_0005,GFMNet模型主要利用什么网络结构来提取多尺度的非欧几里得空间特征？,GFMNet主要利用分层图神经网络(hierarchical GNNs)来提取多尺度图表示。,text,medium,remote_sensing_cd,1,0
+rs_0006,GFMNet中互信息最小化(MIM)优化目标的公式是什么？,"互信息最小化(MIM)优化目标的公式为：MIM(C_i, V_i) = H(C_i) + H(V_i) - H(C_i, V_i)。",text,medium,remote_sensing_cd,1,0
+rs_0007,CCNet的核心概念是将输入图像解耦为哪两个空间？,CCNet的核心概念是将输入图像解耦为一个共享的内容空间(content space)和一个私有的风格空间(style space)。,text,medium,remote_sensing_cd,1,0
+rs_0008,MRB在CCNet中指的是什么？,MRB指的是保持分辨率主干(maintain resolution backbone)，它是一个共享权重的孪生网络，用于提取多尺度内容信息。,text,medium,remote_sensing_cd,1,0
+rs_0009,WS-Net++在频域交互中使用了哪种变换将特征图分解为四个不同的频率图？,WS-Net++使用了离散小波变换(DWT)将特征图分解为四个不同的频率图。,text,medium,remote_sensing_cd,1,0
+rs_0010,WS-Net++中的半监督域自适应(DA)将双时相图像划分为哪三个区域？,半监督域自适应将双时相图像划分为：变化区域(changed regions)、未变化区域(unchanged regions)和不感兴趣区域(regions of no interest)。,text,medium,remote_sensing_cd,1,0
+rs_0011,相比于ViT，ConvNeXt在森林变化检测任务中具有哪些优势？,相比于ViT，ConvNeXt具有更高的计算效率，易于训练和部署，具有高稳定性和对超参数的低敏感性，且能在数据量不足的情况下表现更好。,text,medium,remote_sensing_cd,1,0
+rs_0012,CAFENet是如何同时解决双时相图像风格差异和上采样细节丢失问题的？,CAFENet通过傅里叶特征交换模块(FFEM)减少双时相图像的亮度、颜色和风格差异来解决风格差异问题；通过动态内容感知上采样模块(DCAU)自适应生成偏移量来恢复空间分辨率，解决上采样中的细节丢失问题。,text,medium,remote_sensing_cd,1,0
+rs_0013,GFMNet在特征融合阶段，高频和低频特征分别捕获什么信息？融合的目的是什么？,低频特征捕获整体结构和语义上下文信息，高频特征保留关键的边缘和局部细节信息。融合的目的是为了实现更好的语义-空间对齐(semantic-spatial alignment)。,text,medium,remote_sensing_cd,1,0
+rs_0014,CCNet框架中包含哪两个相互学习的任务？它们分别由哪些分支处理？,CCNet包含变化检测主任务和图像恢复子任务。变化检测任务由内容分支(content branch)处理，图像恢复任务由风格分支(style branches)处理。,text,medium,remote_sensing_cd,1,0
+rs_0015,WS-Net++的波空间-频率交互模块(WSFI)是如何结合空间域和频域交互的？,空间域交互通过特征图相减来捕获像素级差异；频域交互通过离散小波变换(DWT)提取频率图并自适应调整权重，进行频率内和跨频率交互；最后将空间域和频域的交互结果进行拼接融合。,text,medium,remote_sensing_cd,1,0
+rs_0016,WS-Net++中的半监督域自适应(DA)策略如何通过损失函数拉近和推开不同区域的特征分布？,半监督域自适应通过类内域差异损失来紧凑(拉近)未变化区域内的特征表示，同时通过类间域差异损失来扩大(推开)变化区域之间的特征表示。,text,medium,remote_sensing_cd,1,0
+rs_0017,伪变化在农田变化检测中主要由哪些因素引起？CAFENet的哪两个模块主要用于解决此问题？,伪变化主要由成像环境变化(如颜色和亮度不一致)和季节性变化(如耕作)引起。CAFENet主要通过变化感知(CA)分支和傅里叶特征交换模块(FEM/FFEM)来减少这些伪变化。,text,medium,remote_sensing_cd,1,0
+rs_0018,CCNet的总损失函数由哪几部分组成？它们的作用分别是什么？,总损失由四部分组成：1)变化检测损失(L_cd)，衡量预测准确性；2)特征分离损失(L_sep)，监督风格与内容特征的线性无关性；3)内容相似性损失(L_sim)，确保双时相输入内容特征分布相似；4)图像恢复损失(L_rst)，指导解码器恢复出与输入高度相似的图像。,text,medium,remote_sensing_cd,1,0
+rs_0019,相比于SNUNet和BIT，ConvNeXt-Uphead在森林变化检测数据集上的F1分数和参数量表现如何？,ConvNeXt-Uphead的F1分数最高(88.34%)，优于SNUNet(86.26%)和BIT(83.54%)；但它的参数量最大(93.28M)，远高于SNUNet(12.03M)和BIT(2.99M)。,text,medium,remote_sensing_cd,1,0
+rs_0020,GFMNet中的动态高通边缘滤波器(DHPEF)和动态低通平滑滤波器(DLPSF)在处理特征时有何不同？,DLPSF动态生成低通滤波器来平滑高层特征，使用softmax归一化权重；而DHPEF用于增强高分辨率特征中的边界细节，其高通滤波器是通过从单位核中减去低通滤波器反转得到的。,text,medium,remote_sensing_cd,1,0
+rs_0021,在LEVIR-CD数据集上，CCNet的F1分数相比基于Transformer的ChangeFormer和基于CNN的SNUNet高出多少？,在LEVIR-CD数据集上，CCNet的F1分数为92.14%，比ChangeFormer(91.71%)高出0.43%，比SNUNet(91.31%)高出0.83%。,text,medium,remote_sensing_cd,1,0
+rs_0022,在WHU-CD数据集上，WS-Net++相较于其基础版本WS-Net在精确率(Precision)和召回率(Recall)上表现如何？,在WHU-CD数据集上，WS-Net++的精确率(95.36%)略低于WS-Net(95.88%)，但它的召回率(93.70%)高于WS-Net(93.38%)，从而在综合性能上取得了更优的结果。,text,medium,remote_sensing_cd,1,0
+rs_0023,WS-Net++在训练过程中为什么只在前10个epoch使用K-means聚类？,因为随着训练的进行，网络的判别能力逐渐增强，能够更容易地识别出不感兴趣区域；停止使用耗时的K-means聚类可以节省时间并提高效率。,text,medium,remote_sensing_cd,1,0
+rs_0024,CAFENet中的高效多尺度注意力机制(EMSA)与传统的SE模块在通道权重调整方式上有什么区别？,传统的SE模块使用全连接层进行通道加权，而CAFENet中的EMSA机制通过全局池化(global pooling)来调整通道的重要性。,text,medium,remote_sensing_cd,1,0
+rs_0025,为什么CCNet要在变化检测框架中引入图像恢复子任务？,因为去风格化不可避免地会导致信息丢失，需要额外的监督来保证语义一致性和信息完整性。图像恢复任务通过评估恢复图像与原图的相似度，确保分离出的内容和风格特征保留了足够的原始输入信息。,text,medium,remote_sensing_cd,1,0
+rs_0026,在ConvNeXt-Uphead模型的训练阶段，Adam优化器的学习率衰减参数betas具体设置为什么数值？,"学习率衰减参数betas具体设置为(0.9, 0.999)。",text,medium,remote_sensing_cd,1,0
+rs_0027,在CAFENet的DCAU模块中，控制偏移移动范围的静态范围因子a的默认值是多少？,静态范围因子a的默认值为0.30。,text,medium,remote_sensing_cd,1,0
+rs_0028,在CCNet模型针对SVCD等数据集进行优化时，损失函数权重\lambda_1、\lambda_2和\lambda_3被设定为多少？,损失函数权重\lambda_1、\lambda_2和\lambda_3均被设定为0.1。,text,medium,remote_sensing_cd,1,0
+rs_0029,在WS-Net++的总体损失函数L_total中，用于平衡各损失函数的超参数\lambda被设置为什么值？,超参数\lambda被设置为0.01。,text,medium,remote_sensing_cd,1,0
+rs_0030,在GFMNet的特征前馈网络(FFN)中，使用的DropPath与Dropout在丢弃操作上的核心区别是什么？,Dropout是随机丢弃单个神经元的输出或特征，而DropPath不丢弃单个神经元，而是按概率跳过整个残差分支。,text,medium,remote_sensing_cd,1,0
+ood_0001,请写一段 Python 代码，计算列表中偶数的平均值。,可以先筛选偶数，再求和并除以偶数个数；若无偶数返回 None。,text,easy,ood_general,1,1
+ood_0002,如何在 Linux 中查看某个进程占用的端口？,可用 ss -ltnp 或 lsof -i 查看端口与进程映射。,text,easy,ood_general,1,1
+ood_0003,解释一下什么是二叉搜索树的中序遍历。,中序遍历顺序是左子树、根节点、右子树；对 BST 会得到有序序列。,text,easy,ood_general,1,1
+ood_0004,给我一个三天增肌饮食计划，按早中晚列出。,可按高蛋白、足够碳水和健康脂肪配置三天早中晚，并保证总热量盈余。,text,medium,ood_general,1,1
+ood_0005,写一个 SQL 查询，找出每个部门工资最高的员工。,可用窗口函数 ROW_NUMBER() OVER(PARTITION BY dept ORDER BY salary DESC)=1。,text,medium,ood_general,1,1
+ood_0006,如何判断一个字符串是不是回文？,可比较字符串与其反转后的结果是否相同。,text,easy,ood_general,1,1
+ood_0007,请解释 TCP 三次握手和四次挥手。,三次握手用于建立连接，四次挥手用于可靠断开连接。,text,medium,ood_general,1,1
+ood_0008,我想去成都旅游两天，给个路线建议。,可按宽窄巷子-锦里-武侯祠-熊猫基地-春熙路安排两日路线。,text,easy,ood_general,1,1
+ood_0009,什么是 Docker 镜像和容器的区别？,镜像是只读模板，容器是镜像运行后的实例。,text,easy,ood_general,1,1
+ood_0010,请给我一个前端性能优化清单。,可从资源压缩、缓存策略、懒加载、代码分割和关键渲染路径优化入手。,text,medium,ood_general,1,1
+ood_0011,在 Git 中如何撤销最近一次提交但保留改动？,可使用 git reset --soft HEAD~1 保留改动并撤销提交。,text,easy,ood_general,1,1
+ood_0012,解释一下 Transformer 的多头注意力。,多头注意力并行学习不同子空间关联，最后拼接并线性映射。,text,medium,ood_general,1,1
+ood_0013,如何设计一个秒杀系统防止超卖？,需结合库存预扣、幂等、限流、消息队列与最终一致性控制。,text,hard,ood_general,1,1
+ood_0014,帮我写一份机器学习工程师的简历要点。,突出项目影响、模型效果、工程化能力与协作经验。,text,medium,ood_general,1,1
+ood_0015,什么情况下应该使用 Redis 而不是 MySQL？,高并发低延迟读写、缓存和临时数据场景优先 Redis，持久事务场景优先 MySQL。,text,medium,ood_general,1,1

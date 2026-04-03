@@ -49,7 +49,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models as qmodels
 
 DEFAULT_KNOWLEDGE_BASE = "./knowledge_base"
-DEFAULT_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+DEFAULT_EMBEDDING_MODEL = "BAAI/bge-m3"
 DEFAULT_RERANK_MODEL = "BAAI/bge-reranker-base"
 BM25_WEIGHT = 0.4
 VECTOR_WEIGHT = 0.6
@@ -96,6 +96,7 @@ def _load_text_file(path: Path) -> List[Document]:
 def _load_pdf_file_as_md(path: Path) -> List[Document]:
     """使用 pymupdf4llm 提取保留排版和表格的 Markdown"""
     try:
+        # 图片本体不会落地保存
         md_text = pymupdf4llm.to_markdown(str(path), write_images=False)
         return [Document(page_content=md_text, metadata={"source": str(path)})]
     except Exception as e:
@@ -276,12 +277,12 @@ class ParentChildQdrantRetriever:
                     data = json.load(f)
                     parent_docs.append(Document(page_content=data["page_content"], metadata=data["metadata"]))
         
-        # 4. 可选：用你的 CrossEncoder 对召回的宏大 Parent Chunks 进行重排
-        if self._reranker and parent_docs:
-            try:
-                parent_docs = self._reranker.compress_documents(parent_docs, query)
-            except Exception as e:
-                print(f"[RAG] 重排失败: {e}")
+        # # 4. 可选：用你的 CrossEncoder 对召回的宏大 Parent Chunks 进行重排
+        # if self._reranker and parent_docs:
+        #     try:
+        #         parent_docs = self._reranker.compress_documents(parent_docs, query)
+        #     except Exception as e:
+        #         print(f"[RAG] 重排失败: {e}")
                 
         return parent_docs
 
@@ -390,7 +391,7 @@ def _build_retriever_internal(knowledge_dir: str = DEFAULT_KNOWLEDGE_BASE, k: in
     # --- 2. 父子拆分与存储准备 ---
     all_child_chunks = []
     
-    # 清空旧的 parent 缓存 (已修复多线程冲突)
+    # 清空旧的 parent 缓存 (修复多线程冲突)
     for f in os.listdir(PARENT_STORE_DIR):
         file_path = os.path.join(PARENT_STORE_DIR, f)
         try:
@@ -427,7 +428,7 @@ def _build_retriever_internal(knowledge_dir: str = DEFAULT_KNOWLEDGE_BASE, k: in
         
     client.create_collection(
         collection_name=collection_name,
-        vectors_config=qmodels.VectorParams(size=384, distance=qmodels.Distance.COSINE),
+        vectors_config=qmodels.VectorParams(size=1024, distance=qmodels.Distance.COSINE),
         sparse_vectors_config={"sparse": qmodels.SparseVectorParams()},
     )
 

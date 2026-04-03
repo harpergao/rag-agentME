@@ -1,0 +1,6 @@
+case_id,question,reference,modality,difficulty,domain_tag,need_retrieval,is_ood
+rs_0001,ConvNeXt-Uphead模型的编码器采用了哪种架构？,ConvNeXt-Uphead模型的编码器采用了ConvNeXt架构，形成了一个双分支网络来提取不同时间点的图像特征。,text,medium,remote_sensing_cd,1,0
+rs_0002,为什么在森林变化检测中，视觉Transformer(ViT)难以在短时间内满足需求？,因为ViT的自注意力机制计算复杂度高，且通常需要大量数据进行训练，而森林变化检测面临数据不足的问题。,text,medium,remote_sensing_cd,1,0
+rs_0003,CAFENet网络中FFEM模块的全称是什么？,FFEM的全称是傅里叶特征交换模块(Fourier feature exchange module)。,text,medium,remote_sensing_cd,1,0
+ood_001,帮我写一份机器学习工程师的简历要点。,突出项目影响、模型效果、工程化能力与协作经验。,text,medium,ood_general,1,1
+ood_002,什么情况下应该使用 Redis 而不是 MySQL？,高并发低延迟读写、缓存和临时数据场景优先 Redis，持久事务场景优先 MySQL。,text,medium,ood_general,1,1

@@ -17,6 +17,7 @@ output/
 output/Qwen3-VL-4Bmoelora/
 multi_agent/parent_chunks_cache/
 multi_agent/qdrant_local_db/
+.env
 # Distribution / packaging
 .Python
 build/

@@ -15,14 +15,14 @@ from langchain_wrappers import LocalQwenChatModel
 from tools import text_retrieval, image_retrieval, cross_doc_compare, citation_formatter, save_session_summary, save_session_summary_sync
 # 引入 LangGraph 和 LangChain 的消息处理机制
 from langgraph.graph.message import add_messages
-from langchain_core.messages import RemoveMessage, AnyMessage, HumanMessage, AIMessage, SystemMessage
+from langchain_core.messages import RemoveMessage, AnyMessage, HumanMessage, AIMessage, SystemMessage, ToolMessage
 from langgraph.checkpoint.memory import MemorySaver # 用于持久化记忆
 from langgraph.types import Command
 
 import os
 from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import ToolNode
-
+from typing import Literal
 # --- 1. 状态定义 ---
 
 class SubAgentState(TypedDict):
@@ -86,26 +86,51 @@ def route_after_orchestrator(state: SubAgentState) -> Literal["tools", "fallback
     
     return "collect_answer"
 
+# def should_compress_context(state: SubAgentState) -> Literal["compress_context", "orchestrator"]:
+#     """纯粹的路由函数：只负责判断 Token 长度并指路，绝不修改 State"""
+#     messages = state.get("messages", [])
+    
+#     # 提取 summary，并安全转换为字符串
+#     summary_obj = state.get("context_summary", "")
+#     summary_str = summary_obj.content if hasattr(summary_obj, "content") else str(summary_obj)
+    
+#     # 安全拼接
+#     current_text = str([m.content for m in messages if hasattr(m, "content")]) + summary_str
+#     TOKEN_LIMIT = 25000 
+    
+#     if len(current_text) > TOKEN_LIMIT:
+#         print("🔀 [Router] 上下文超限，路由至 compress_context 节点")
+#         return "compress_context"
+    
+#     print("🔀 [Router] 上下文安全，路由回 orchestrator 节点")
+#     # 🚨 核心修复：只返回字符串，绝对不要 return Command(...)
+#     return "orchestrator"
+def estimate_tokens(text: str) -> int:
+    """粗略估算 Token 数量：中英文混合情况下，大约 2 个字符算 1 个 Token"""
+    return len(str(text)) // 2
+
 def should_compress_context(state: SubAgentState) -> Literal["compress_context", "orchestrator"]:
-    """纯粹的路由函数：只负责判断 Token 长度并指路，绝不修改 State"""
+    """纯粹的路由函数：使用动态阈值判断是否超载"""
     messages = state.get("messages", [])
+    summary_str = state.get("context_summary", "")
     
-    # 提取 summary，并安全转换为字符串
-    summary_obj = state.get("context_summary", "")
-    summary_str = summary_obj.content if hasattr(summary_obj, "content") else str(summary_obj)
-    
-    # 安全拼接
-    current_text = str([m.content for m in messages if hasattr(m, "content")]) + summary_str
-    TOKEN_LIMIT = 25000 
-    
-    if len(current_text) > TOKEN_LIMIT:
-        print("🔀 [Router] 上下文超限，路由至 compress_context 节点")
+    # 1. 计算当前的 Token 负载
+    current_token_messages = estimate_tokens("".join([str(m.content) for m in messages if hasattr(m, "content")]))
+    current_token_summary = estimate_tokens(summary_str)
+    total_tokens = current_token_messages + current_token_summary
+
+    # 2. 动态阈值公式 (BASE + 摘要长度的膨胀系数)
+    # 基础允许 8000 token (约 1.6 万字符)，摘要每增加 1 token，容忍度增加 1.2
+    BASE_TOKEN_THRESHOLD = 8000 
+    TOKEN_GROWTH_FACTOR = 1.2
+    max_allowed = BASE_TOKEN_THRESHOLD + int(current_token_summary * TOKEN_GROWTH_FACTOR)
+
+    if total_tokens > max_allowed:
+        print(f"🔀 [Router] 负载超标 ({total_tokens}/{max_allowed} tokens)，路由至 compress_context 节点")
         return "compress_context"
     
-    print("🔀 [Router] 上下文安全，路由回 orchestrator 节点")
-    # 🚨 核心修复：只返回字符串，绝对不要 return Command(...)
+    print(f"🔀 [Router] 负载安全 ({total_tokens}/{max_allowed} tokens)，继续交由 orchestrator 处理")
     return "orchestrator"
-
 # --- 3. 节点实现 (Nodes) ---
 
 class AdvancedResearchGraph:
@@ -268,6 +293,10 @@ class AdvancedResearchGraph:
             f"用户提出的原始问题是：'{original_query}'\n\n"
             f"请根据以下各个子问题的检索结论，整合出一份逻辑连贯、重点突出的最终回答：\n\n{combined_text}\n\n"
             f"【⚠️重要要求】：请必须使用与用户原始问题相同的语言（如果问题是英文，请用英文回答；如果是中文，请用中文回答）来进行总结！"
+            f"【绝对约束条件】："
+            f"1. 核心回溯（关键！）：你的回答第一句话必须包含原问题中的核心主语、专有名词和前提条件，使其成为一个完整的陈述句。"
+            f"2. 极简原则：问题问什么就只回答什么，严禁在罗列事实后附加任何关于“为什么这样做”或“有什么优缺点/作用”的总结和解释。"
+            f"3. 语气要求：像一个冷酷的数据库一样返回数据，绝不要使用“综上所述”、“总之”等废话。"
         )
         # 建议此处用纯文本 LLM (self.llm) 而不是 VLM，除非你的结果里有图片需要识别
         response = self.llm.invoke([HumanMessage(content=prompt)])
@@ -345,14 +374,47 @@ class AdvancedResearchGraph:
         }
 
     def fallback_response(self, state: SubAgentState):
-        """强制回答"""
-        prompt = f"尽力回答：{state['question']}，基于：{state.get('context_summary')}"
+        """当系统达到最大搜索限制时的强制兜底回答节点"""
+        # prompt = f"尽力回答：{state['question']}，基于：{state.get('context_summary')}"
+        prompt = """You are an expert synthesis assistant. The system has reached its maximum research limit.
+
+                Your task is to provide the most complete answer possible using ONLY the information provided below.
+
+                Input structure:
+                - "Compressed Research Context": summarized findings from prior search iterations — treat as reliable.
+                - "Retrieved Data": raw tool outputs from the current iteration — prefer over compressed context if conflicts arise.
+                Either source alone is sufficient if the other is absent.
+
+                Rules:
+                1. Source Integrity: Use only facts explicitly present in the provided context. Do not infer, assume, or add any information not directly supported by the data.
+                2. Handling Missing Data: Cross-reference the USER QUERY against the available context.
+                Flag ONLY aspects of the user's question that cannot be answered from the provided data.
+                Do not treat gaps mentioned in the Compressed Research Context as unanswered
+                unless they are directly relevant to what the user asked.
+                3. Tone: Professional, factual, and direct.
+                4. Output only the final answer. Do not expose your reasoning, internal steps, or any meta-commentary about the retrieval process.
+                5. Do NOT add closing remarks, final notes, disclaimers, summaries, or repeated statements after the Sources section.
+                The Sources section is always the last element of your response. Stop immediately after it.
+
+                Formatting:
+                - Use Markdown (headings, bold, lists) for readability.
+                - Write in flowing paragraphs where possible.
+                - Conclude with a Sources section as described below.
+
+                Sources section rules:
+                - Include a "---\\n**Sources:**\\n" section at the end, followed by a bulleted list of file names.
+                - List ONLY entries that have a real file extension (e.g. ".pdf", ".docx", ".txt").
+                - Any entry without a file extension is an internal chunk identifier — discard it entirely, never include it.
+                - Deduplicate: if the same file appears multiple times, list it only once.
+                - If no valid file names are present, omit the Sources section entirely.
+                - THE SOURCES SECTION IS THE LAST THING YOU WRITE. Do not add anything after it.
+                """
         ans = self.llm.invoke([HumanMessage(content=prompt)])
         return {"messages": [ans]}
 
     # def compress_context(self, state: SubAgentState):
     #     """当检索文档过长时：压缩知识，并删除原始的冗长 ToolMessage"""
-    #     print("🗜️ [Sub] 正在压缩局部工作记忆...")
+    #     print(" [Sub] 正在压缩局部工作记忆...")
     #     messages = state.get("messages", [])
     #     current_summary = state.get("context_summary", "")
         
@@ -380,46 +442,159 @@ class AdvancedResearchGraph:
     #         "context_summary": compressed_text, # 这里存入纯字符串
     #         "messages": delete_messages 
     #     }
+    # def compress_context(self, state: SubAgentState):
+    #     """当检索文档过长时：压缩知识，并安全清理冗长的工具消息"""
+    #     print("🗜️ [Sub] 正在压缩局部工作记忆...")
+    #     messages = state.get("messages", [])
+    #     current_summary = state.get("context_summary", "")
+        
+    #     # 提取所有文本准备压缩
+    #     full_text = "\n".join([str(m.content) for m in messages if m.content])
+        
+    #     past_keys = state.get("retrieval_keys", [])
+    #     keys_str = ", ".join(past_keys) if past_keys else "无"
+        
+    #     # 🌟 优化 Prompt：强保真压缩，防止丢弃“干草堆里的针”
+    #     prompt = (
+    #         f"你是一个严谨的学术资料整理员。请从以下海量检索结果中提取与问题 '{state['question']}' 相关的核心内容。\n"
+    #         f"【严格约束】：\n"
+    #         f"1. 必须原封不动地保留所有与问题相关的具体数值、指标（如 F1 分数）、超参数（如 a=0.30）、模块缩写及全称。\n"
+    #         f"2. 保留不同算法之间的对比优缺点，不要做模糊化概括。\n"
+    #         f"【已检索关键词，后续避开】：{keys_str}\n"
+    #         f"【已有知识摘要】：{current_summary}\n"
+    #         f"【最新检索文本】：\n{full_text}"
+    #     )
+    #     compressed_knowledge_msg = self.llm.invoke([HumanMessage(content=prompt)])
+    #     compressed_text = compressed_knowledge_msg.content if hasattr(compressed_knowledge_msg, "content") else str(compressed_knowledge_msg)
+        
+    #     # 🌟 核心修复：精准清理内存，绝不误伤用户问题
+    #     delete_messages = []
+    #     for m in messages:
+    #         # 只删除极其占地方的 ToolMessage (检索结果)
+    #         # 以及没有工具调用的普通 AIMessage (过期的思考过程)
+    #         if isinstance(m, ToolMessage) and m.id:
+    #             delete_messages.append(RemoveMessage(id=m.id))
+    #         elif isinstance(m, AIMessage) and not m.tool_calls and m.id:
+    #             delete_messages.append(RemoveMessage(id=m.id))
+
+    #     return {
+    #         "context_summary": compressed_text, 
+    #         "messages": delete_messages 
+    #     }
     def compress_context(self, state: SubAgentState):
-    """当检索文档过长时：压缩知识，并安全清理冗长的工具消息"""
-    print("🗜️ [Sub] 正在压缩局部工作记忆...")
-    messages = state.get("messages", [])
-    current_summary = state.get("context_summary", "")
-    
-    # 提取所有文本准备压缩
-    full_text = "\n".join([str(m.content) for m in messages if m.content])
-    
-    past_keys = state.get("retrieval_keys", [])
-    keys_str = ", ".join(past_keys) if past_keys else "无"
-    
-    # 🌟 优化 Prompt：强保真压缩，防止丢弃“干草堆里的针”
-    prompt = (
-        f"你是一个严谨的学术资料整理员。请从以下海量检索结果中提取与问题 '{state['question']}' 相关的核心内容。\n"
-        f"【严格约束】：\n"
-        f"1. 必须原封不动地保留所有与问题相关的具体数值、指标（如 F1 分数）、超参数（如 a=0.30）、模块缩写及全称。\n"
-        f"2. 保留不同算法之间的对比优缺点，不要做模糊化概括。\n"
-        f"【已检索关键词，后续避开】：{keys_str}\n"
-        f"【已有知识摘要】：{current_summary}\n"
-        f"【最新检索文本】：\n{full_text}"
-    )
-    compressed_knowledge_msg = self.llm.invoke([HumanMessage(content=prompt)])
-    compressed_text = compressed_knowledge_msg.content if hasattr(compressed_knowledge_msg, "content") else str(compressed_knowledge_msg)
-    
-    # 🌟 核心修复：精准清理内存，绝不误伤用户问题
-    delete_messages = []
-    for m in messages:
-        # 只删除极其占地方的 ToolMessage (检索结果)
-        # 以及没有工具调用的普通 AIMessage (过期的思考过程)
-        if isinstance(m, ToolMessage) and m.id:
-            delete_messages.append(RemoveMessage(id=m.id))
-        elif isinstance(m, AIMessage) and not m.tool_calls and m.id:
-            delete_messages.append(RemoveMessage(id=m.id))
+        """当检索文档过长时：高保真压缩知识，注入防重放机制，清理内存"""
+        print("🗜️ [Sub] 正在执行动态局部工作记忆压缩...")
+        messages = state.get("messages", [])
+        existing_summary = state.get("context_summary", "").strip()
 
-    return {
-        "context_summary": compressed_text, 
-        "messages": delete_messages 
-    }
+        # ==========================================
+        # 1. 提取刚才调用过的工具和关键词 (防死循环核心)
+        # ==========================================
+        new_keys = set()
+        for msg in reversed(messages):
+            # 寻找 AI 调用工具的痕迹
+            if isinstance(msg, AIMessage) and getattr(msg, "tool_calls", None):
+                for tc in msg.tool_calls:
+                    tool_name = tc["name"]
+                    args = tc.get("args", {})
+                    # 适配你自己的工具名称
+                    if tool_name in ["text_retrieval", "cross_doc_compare", "image_retrieval"]:
+                        query = args.get("query", "")
+                        if query:
+                            new_keys.add(f"{tool_name}::{query}")
+                break # 只抓取最近一次的调用，防止过度累积
+                
+        # 合并新旧查询记录
+        updated_keys = set(state.get("retrieval_keys", [])) | new_keys
 
+        # ==========================================
+        # 2. 构建待压缩的对话回忆录
+        # ==========================================
+        conversation_text = f"【当前核心问题】:\n{state.get('question')}\n\n【需要压缩的对话内容】:\n\n"
+        if existing_summary:
+            conversation_text += f"[之前的摘要记忆]\n{existing_summary}\n\n"
+
+        for msg in messages[1:]: # 跳过最开始的 SystemPrompt
+            if isinstance(msg, AIMessage):
+                calls = ", ".join(f"{tc['name']}({tc['args']})" for tc in getattr(msg, "tool_calls", []))
+                tool_info = f" | 执行了工具: {calls}" if calls else ""
+                conversation_text += f"[助手思考{tool_info}]\n{msg.content or '(仅调用工具)'}\n\n"
+            elif isinstance(msg, ToolMessage):
+                conversation_text += f"[工具返回的大段文献 — {msg.name}]\n{msg.content}\n\n"
+
+        # ==========================================
+        # 3. 强约束 Prompt (保护你的 Golden Dataset 细节)
+        # ==========================================
+        compression_prompt = (
+            "你是一个严谨的遥感学术资料整理员。你的任务是将冗长的对话记录压缩为精炼的【工作记忆摘要】。\n"
+            "【绝对遵守的纪律】：\n"
+            "1. 数据保真：必须原封不动地保留上下文中出现的具体数值（如 F1: 97.96%）、超参数（如 λ=0.01）、模块英文缩写（如 DCAU）。绝对不许用“多项指标”这种废话概括！\n"
+            "2. 剔除废话：删掉助手的寒暄、思考过程的废话，只保留文献中的事实结论和对比差异。\n"
+        )
+        # compression_prompt = (
+        #     """You are an expert research context compressor.
+
+        #     Your task is to compress retrieved conversation content into a concise, query-focused, and structured summary that can be directly used by a retrieval-augmented agent for answer generation.
+
+        #     Rules:
+        #     1. Keep ONLY information relevant to answering the user's question.
+        #     2. Preserve exact figures, names, versions, technical terms, and configuration details.
+        #     3. Remove duplicated, irrelevant, or administrative details.
+        #     4. Do NOT include search queries, parent IDs, chunk IDs, or internal identifiers.
+        #     5. Organize all findings by source file. Each file section MUST start with: ### filename.pdf
+        #     6. Highlight missing or unresolved information in a dedicated "Gaps" section.
+        #     7. Limit the summary to roughly 400-600 words. If content exceeds this, prioritize critical facts and structured data.
+        #     8. Do not explain your reasoning; output only structured content in Markdown.
+
+        #     Required Structure:
+
+        #     # Research Context Summary
+
+        #     ## Focus
+        #     [Brief technical restatement of the question]
+
+        #     ## Structured Findings
+
+        #     ### filename.pdf
+        #     - Directly relevant facts
+        #     - Supporting context (if needed)
+
+        #     ## Gaps
+        #     - Missing or incomplete aspects
+
+        #     The summary should be concise, structured, and directly usable by an agent to generate answers or plan further retrieval.
+        #     """
+        # )
+        summary_response = self.llm.invoke([
+            SystemMessage(content=compression_prompt), 
+            HumanMessage(content=conversation_text)
+        ])
+        new_summary = summary_response.content if hasattr(summary_response, "content") else str(summary_response)
+
+        # ==========================================
+        # 4. 强制注入“已执行动作”，防止 Agent 失忆重复搜索
+        # ==========================================
+        if updated_keys:
+            block = "\n\n---\n**【系统强制警告：以下检索已执行，绝对禁止再次用相同关键词查知识库！】**\n"
+            block += "\n".join(f"- {k}" for k in updated_keys) + "\n"
+            new_summary += block
+
+        # ==========================================
+        # 5. 精准清理内存 (安全删除)
+        # ==========================================
+        delete_messages = []
+        for m in messages:
+            # 清理冗长的工具返回和不含工具调用的中间思考过程，保留原始提问
+            if isinstance(m, ToolMessage) and m.id:
+                delete_messages.append(RemoveMessage(id=m.id))
+            elif isinstance(m, AIMessage) and not getattr(m, "tool_calls", None) and m.id:
+                delete_messages.append(RemoveMessage(id=m.id))
+
+        return {
+            "context_summary": new_summary, 
+            "retrieval_keys": list(updated_keys), # 更新查询历史状态
+            "messages": delete_messages 
+        }
     def collect_answer(self, state: SubAgentState):
         """收集子图的答案，并提取所有真实的检索文献供 Ragas 评测"""
         messages = state.get("messages", [])

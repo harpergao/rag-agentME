@@ -222,8 +222,7 @@ if __name__ == "__main__":
     print("\n--- 最终评估报告 ---")
     print(scores)
 
-# # multi_agent/eval_sys.py
-
+# multi_agent/eval_sys.py
 # if __name__ == "__main__":
 #     os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 #     # 实例化评估器
@@ -234,8 +233,8 @@ if __name__ == "__main__":
     
 #     # 模拟 Ragas 生成的数据格式
 #     test_data = {
-#         "question": ["What is the role of graph convolution in the GFMNet architecture for remote sensing change detection?"],
-#         "ground_truth": ["Graph convolution is employed in the GFMNet architecture to extract features from bi-temporal remote sensing images by constructing a graph structure where each image patch is treated as a node and edges connect neighboring patches. This enables the extraction of global representations and contextual information from a non-Euclidean space. Graph convolution aggregates information from each node and its neighbors, capturing and updating each node’s feature representation while enabling effective information exchange across the graph. The process uses max-relative graph convolution to integrate information from neighboring nodes and is combined with feed-forward network (FFN) layers to enhance feature transformation capabilities and mitigate over-smoothing in GNNs."]
+#         "question": ["WS-Net++中的半监督域自适应(DA)将双时相图像划分为哪三个区域？"],
+#         "ground_truth": ["半监督域自适应将双时相图像划分为：变化区域(changed regions)、未变化区域(unchanged regions)和不感兴趣区域(regions of no interest)。"]
 #     }
 #     test_df = pd.DataFrame(test_data)
 
